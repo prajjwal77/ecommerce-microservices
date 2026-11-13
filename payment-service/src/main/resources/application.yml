@@ -13,6 +13,9 @@ spring:
     password: admin
     listener:
       simple:
+        concurrency: 3
+        max-concurrency: 5
+        prefetch: 1
         default-requeue-rejected: false
         retry:
           enabled: true
@@ -34,4 +37,4 @@ management:
 
 payment:
   retry-test:
-    enabled: false
+    enabled: true

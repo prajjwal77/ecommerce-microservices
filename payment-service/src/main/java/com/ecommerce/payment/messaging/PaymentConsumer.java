@@ -71,7 +71,7 @@ public class PaymentConsumer {
                     );
                 }
             }
-
+            
             // Demo processing only: no real payment is executed here.
             System.out.println(
                     "Payment Service processing event: " + event

@@ -1,9 +1,12 @@
 
 package com.ecommerce.order.config;
 
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,9 +28,12 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public Queue paymentQueue() {
-        return new Queue(PAYMENT_QUEUE, true);
-    }
+public Queue paymentQueue() {
+    return QueueBuilder.durable(PAYMENT_QUEUE)
+            .deadLetterExchange("payment.dlx")
+            .deadLetterRoutingKey("payment.failed")
+            .build();
+}
 
     @Bean
     public Queue notificationQueue() {

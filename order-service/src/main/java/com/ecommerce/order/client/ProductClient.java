@@ -12,53 +12,63 @@ import org.springframework.web.client.RestClient;
 @Component
 public class ProductClient {
 
-    private final RestClient restClient;
+        private final RestClient restClient;
 
-    public ProductClient(RestClient restClient) {
-        this.restClient = restClient;
-    }
-
-    @CircuitBreaker(
-            name = "productService",
-            fallbackMethod = "productServiceFallback"
-    )
-    @Retryable(
-            retryFor = ProductServiceException.class,
-            maxAttempts = 3,
-            backoff = @Backoff(
-                    delay = 5000,
-                    multiplier = 2
-            )
-    )
-    public ProductResponse getProduct(Long productId) {
-
-        try {
-
-            return restClient.get()
-                    .uri(
-                            "http://localhost:8083/api/products/{id}",
-                            productId
-                    )
-                    .retrieve()
-                    .body(ProductResponse.class);
-
-        } catch (Exception e) {
-
-            throw new ProductServiceException(
-                    "Product Service is unavailable",
-                    e
-            );
+        public ProductClient(RestClient restClient) {
+                this.restClient = restClient;
         }
-    }
 
-    public ProductResponse productServiceFallback(
-            Long productId,
-            Throwable throwable) {
+        @CircuitBreaker(name = "productService", fallbackMethod = "productServiceFallback")
+        @Retryable(retryFor = ProductServiceException.class, maxAttempts = 3, backoff = @Backoff(delay = 5000, multiplier = 2))
+        public ProductResponse getProduct(Long productId) {
 
-        throw new ProductServiceException(
-                "Product Service is currently unavailable. " +
-                "Circuit breaker is open.",
-                throwable
-        );
-    }
+                try {
+
+                        return restClient.get()
+                                        .uri(
+                                                        "http://localhost:8083/api/products/{id}",
+                                                        productId)
+                                        .retrieve()
+                                        .body(ProductResponse.class);
+
+                } catch (Exception e) {
+
+                        throw new ProductServiceException(
+                                        "Product Service is unavailable",
+                                        e);
+                }
+        }
+
+        public ProductResponse productServiceFallback(
+                        Long productId,
+                        Throwable throwable) {
+
+                throw new ProductServiceException(
+                                "Product Service is currently unavailable. " +
+                                                "Circuit breaker is open.",
+                                throwable);
+        }
+
+        public ProductResponse reserveProduct(Long productId, int quantity) {
+
+                return restClient.post()
+                                .uri(
+                                                "http://localhost:8083/api/products/{id}/reserve?quantity={quantity}",
+                                                productId,
+                                                quantity)
+                                .retrieve()
+                                .body(ProductResponse.class);
+        }
+
+        public void releaseStock(Long productId, int quantity) {
+
+                restClient.post()
+                                .uri(
+                                                "http://localhost:8083/api/products/{id}/release?quantity={quantity}",
+                                                productId,
+                                                quantity)
+                                .retrieve()
+                                .toBodilessEntity();
+        }
+
 }
