@@ -1,26 +1,38 @@
-
 package com.ecommerce.payment.Config;
-
-import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
-import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.ConfirmType;
-import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
 
-@Configuration
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.ConfirmType;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.stereotype.Component;
+
+@Component
 public class PaymentPublisherConfig {
 
     private final CachingConnectionFactory connectionFactory;
+    private final RabbitTemplate rabbitTemplate;
 
     public PaymentPublisherConfig(
-            CachingConnectionFactory connectionFactory) {
+            CachingConnectionFactory connectionFactory,
+            RabbitTemplate rabbitTemplate) {
+
         this.connectionFactory = connectionFactory;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @PostConstruct
-    public void configurePublisherConfirms() {
+    public void configurePublisherReliability() {
+
+        // Enable correlated publisher confirms
         connectionFactory.setPublisherConfirmType(
-                ConfirmType.CORRELATED);
+                ConfirmType.CORRELATED
+        );
+
+        // Enable publisher returns
         connectionFactory.setPublisherReturns(true);
+
+        // Ensure unroutable messages are returned
+        rabbitTemplate.setMandatory(true);
     }
 }

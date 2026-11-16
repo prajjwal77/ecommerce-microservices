@@ -1,4 +1,3 @@
-
 package com.ecommerce.payment.messaging;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -13,67 +12,151 @@ import java.util.UUID;
 public class RedisIdempotencyGuard {
 
     private static final Duration PROCESSING_TTL =
-            Duration.ofHours(1);
+            Duration.ofMinutes(2);
 
     private static final Duration COMPLETED_TTL =
             Duration.ofDays(7);
 
+    private static final String COMPLETED = "COMPLETED";
+
+    private final StringRedisTemplate redisTemplate;
+
+    public RedisIdempotencyGuard(
+            StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public enum ClaimStatus {
+        ACQUIRED,
+        IN_PROGRESS,
+        COMPLETED
+    }
+
+    public record ClaimResult(
+            ClaimStatus status,
+            String token
+    ) {}
+
+    private static final DefaultRedisScript<Long> CLAIM_SCRIPT =
+            new DefaultRedisScript<>(
+                    """
+                    local current = redis.call('GET', KEYS[1])
+
+                    if not current then
+                        redis.call(
+                            'SET',
+                            KEYS[1],
+                            ARGV[1],
+                            'EX',
+                            ARGV[2]
+                        )
+                        return 1
+                    end
+
+                    if current == 'COMPLETED' then
+                        return 3
+                    end
+
+                    return 2
+                    """,
+                    Long.class
+            );
+
     private static final DefaultRedisScript<Long> COMPLETE_SCRIPT =
             new DefaultRedisScript<>(
-                    "if redis.call('GET', KEYS[1]) == ARGV[1] then " +
-                    "return redis.call('SET', KEYS[1], 'COMPLETED', " +
-                    "'EX', ARGV[2]) and 1 else return 0 end",
+                    """
+                    local current = redis.call('GET', KEYS[1])
+
+                    if current == ARGV[1] then
+                        redis.call(
+                            'SET',
+                            KEYS[1],
+                            'COMPLETED',
+                            'EX',
+                            ARGV[2]
+                        )
+                        return 1
+                    end
+
+                    return 0
+                    """,
                     Long.class
             );
 
     private static final DefaultRedisScript<Long> RELEASE_SCRIPT =
             new DefaultRedisScript<>(
-                    "if redis.call('GET', KEYS[1]) == ARGV[1] then " +
-                    "return redis.call('DEL', KEYS[1]) else return 0 end",
+                    """
+                    local current = redis.call('GET', KEYS[1])
+
+                    if current == ARGV[1] then
+                        return redis.call('DEL', KEYS[1])
+                    end
+
+                    return 0
+                    """,
                     Long.class
             );
 
-    private final StringRedisTemplate redisTemplate;
+    public ClaimResult claim(String eventId) {
 
-    public RedisIdempotencyGuard(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
-    }
+        String key = "payment:idempotency:" + eventId;
 
-    public String claim(String eventId) {
-        String key = key(eventId);
-        String token = UUID.randomUUID().toString();
+        String token = "PROCESSING:" + UUID.randomUUID();
 
-        Boolean claimed = redisTemplate.opsForValue().setIfAbsent(
-                key, token, PROCESSING_TTL
+        Long result = redisTemplate.execute(
+                CLAIM_SCRIPT,
+                List.of(key),
+                token,
+                String.valueOf(PROCESSING_TTL.toSeconds())
         );
 
-        return Boolean.TRUE.equals(claimed) ? token : null;
+        if (result == null) {
+            throw new IllegalStateException(
+                    "Redis returned null while claiming event: " + eventId
+            );
+        }
+
+        if (result == 1L) {
+            return new ClaimResult(ClaimStatus.ACQUIRED, token);
+        }
+
+        if (result == 3L) {
+            return new ClaimResult(ClaimStatus.COMPLETED, null);
+        }
+
+        return new ClaimResult(ClaimStatus.IN_PROGRESS, null);
     }
 
     public void markCompleted(String eventId, String token) {
+
+        String key = "payment:idempotency:" + eventId;
+
         Long result = redisTemplate.execute(
                 COMPLETE_SCRIPT,
-                List.of(key(eventId)),
+                List.of(key),
                 token,
                 String.valueOf(COMPLETED_TTL.toSeconds())
         );
 
-        if (!Long.valueOf(1).equals(result)) {
+        if (result == null || result != 1L) {
             throw new IllegalStateException(
-                    "Lost Redis processing claim for event " + eventId
+                    "Lost Redis processing ownership for event: " + eventId
             );
         }
     }
 
     public void release(String eventId, String token) {
+
+        if (token == null) {
+            return;
+        }
+
+        String key = "payment:idempotency:" + eventId;
+
         redisTemplate.execute(
                 RELEASE_SCRIPT,
-                List.of(key(eventId)),
+                List.of(key),
                 token
         );
-    }
-
-    private String key(String eventId) {
-        return "payment:event:" + eventId;
     }
 }
