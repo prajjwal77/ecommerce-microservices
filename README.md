@@ -619,3 +619,18 @@ Explore the engineering design and implementation details:
 - Multiple RabbitMQ consumers.
 - Retry, Dead Letter Exchange and Dead Letter Queue.
 - Synchronous and asynchronous microservice communication.
+## Architecture & Technical Documentation
+
+Explore the engineering design and implementation details:
+
+- [System Architecture](docs/architecture.md)
+- [Testing & Validation Results](docs/testing-and-validation.md)
+
+### Engineering Highlights
+
+- Event-driven communication with RabbitMQ.
+- Redis-based payment idempotency.
+- Concurrent inventory reservation.
+- Multiple RabbitMQ consumers.
+- Retry, Dead Letter Exchange and Dead Letter Queue.
+- Synchronous and asynchronous microservice communication.
